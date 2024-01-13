@@ -139,6 +139,13 @@ I (Chris) admit it. My patch of [the official Transformer-XL codebase](https://g
 
 One asset of our training pipeline, the code which adapts Lakh MIDI to NES MIDI for transfer learning, is somewhat more polished. It can be found at `LakhNES/data/adapt_lakh_to_nes.py`.
 
+
+```bash
+python3 train.py --data ../data/nesmdb_tx1 --dataset nesmdb --cuda --batch_size 30 --n_head 8
+python3 generate.py data/nesmdb_tx1/ --out_dir ./generated --num 10 --temp 0.5
+python3 midi_all.py generated/ translated2/ 
+```
+
 ## User study
 
 Information about how to use the code for our Amazon Mechanical Turk user study (under `LakhNES/userstudy`) is forthcoming.
