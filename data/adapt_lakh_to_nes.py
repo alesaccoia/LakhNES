@@ -257,8 +257,8 @@ if __name__ == '__main__':
   import pretty_midi
   from tqdm import tqdm
 
-  midi_fps = glob.glob('./lakh/lmd_full/*/*.mid*')
-  out_dir = './out'
+  midi_fps = glob.glob('./lmd_full/*/*.mid*')
+  out_dir = './lmd_full_converted'
 
   if os.path.isdir(out_dir):
     shutil.rmtree(out_dir)

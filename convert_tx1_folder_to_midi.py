@@ -25,5 +25,6 @@ if __name__ == '__main__':
             midi = tx1_to_midi(tx1)
 
             # Write the MIDI file
-            midi.write(output_file_path)
+            with open(output_file_path, 'wb') as f:
+                f.write(midi)
 

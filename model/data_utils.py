@@ -1,6 +1,8 @@
 import os, sys
 import glob
 
+import pickle
+from tqdm import tqdm
 from collections import Counter, OrderedDict
 import numpy as np
 import torch
@@ -143,13 +145,14 @@ class LMShuffledIterator(object):
 
 
 class LMMultiFileIterator(LMShuffledIterator):
-    def __init__(self, paths, vocab, bsz, bptt, device='cpu', ext_len=None,
+    def __init__(self, paths, name, vocab, bsz, bptt, device='cpu', ext_len=None,
         shuffle=False, augment_transpose=False, augment_stretch=False, augment_switchp1p2=False, augment_selectens=False,
         skip_short=False,
         trim_padding=False):
 
         self.paths = paths
         self.vocab = vocab
+        self.name = name
 
         self.bsz = bsz
         self.bptt = bptt
@@ -179,28 +182,58 @@ class LMMultiFileIterator(LMShuffledIterator):
 
         return sent_stream
 
+    def cache_path(self):
+        # Create a hash of the file paths list for a unique cache filename
+        paths_hash = hash(tuple(self.paths))
+        cache_file_name = f"cache_{self.name}.pkl"
+        return os.path.join("cache_dir", cache_file_name)  # Use an appropriate directory for cache files
+
+
+    def save_to_cache(self, data):
+        cache_file = self.cache_path()
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        with open(cache_file, 'wb') as f:
+            pickle.dump(data, f)
+
+    def load_from_cache(self):
+        cache_file = self.cache_path()
+        if os.path.exists(cache_file):
+            with open(cache_file, 'rb') as f:
+                return pickle.load(f)
+        return None
+
     def __iter__(self):
-        if self.shuffle:
-            np.random.shuffle(self.paths)
+        # Check if cached data is available
+        cached_data = self.load_from_cache()
+        if cached_data is not None:
+            print("Loaded OK")
+            sents = cached_data
+        else:
+            if self.shuffle:
+                np.random.shuffle(self.paths)
 
-        sents = []
-        for path in self.paths:
-            sents.extend(self.vocab.encode_file(path, add_double_eos=True,
-              augment_transpose=self.augment_transpose,
-              augment_stretch=self.augment_stretch,
-              augment_switchp1p2=self.augment_switchp1p2,
-              augment_selectens=self.augment_selectens,
-              trim_padding=self.trim_padding))
+            # Process files with a progress bar
+            sents = []
+            for path in tqdm(self.paths, desc="Processing Files"):
+                sents.extend(self.vocab.encode_file(path, add_double_eos=True,
+                  augment_transpose=self.augment_transpose,
+                  augment_stretch=self.augment_stretch,
+                  augment_switchp1p2=self.augment_switchp1p2,
+                  augment_selectens=self.augment_selectens,
+                  trim_padding=self.trim_padding))
 
-        if self.skip_short:
-          sents = [s for s in sents if len(s) >= 10]
+            if self.skip_short:
+                sents = [s for s in sents if len(s) >= 10]
 
-        if self.shuffle:
-            np.random.shuffle(sents)
+            if self.shuffle:
+                np.random.shuffle(sents)
+
+            # Save the processed data to cache
+            self.save_to_cache(sents)
 
         sent_stream = iter(sents)
         for batch in self.stream_iterator(sent_stream):
-          yield batch
+            yield batch
 
 
 class Corpus(object):
@@ -258,7 +291,7 @@ class Corpus(object):
                 data_iter = LMOrderedIterator(self.train, *args, **kwargs)
             elif self.dataset in ['lm1b', 'nesmdb']:
                 kwargs['shuffle'] = True
-                data_iter = LMMultiFileIterator(self.train, self.vocab, *args, **kwargs)
+                data_iter = LMMultiFileIterator(self.train, split,  self.vocab, *args, **kwargs)
         elif split in ['valid', 'test']:
             data = self.valid if split == 'valid' else self.test
             if self.dataset in ['ptb', 'wt2', 'wt103', 'enwik8', 'text8']:
@@ -270,7 +303,7 @@ class Corpus(object):
                 # I've decided to let these both always be true for evaluation
                 kwargs['skip_short'] = True
                 kwargs['trim_padding'] = True
-                data_iter = LMMultiFileIterator(data, self.vocab, *args, **kwargs)
+                data_iter = LMMultiFileIterator(data, split, self.vocab, *args, **kwargs)
 
         return data_iter
 
